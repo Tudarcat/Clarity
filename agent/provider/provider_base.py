@@ -7,8 +7,18 @@ class LLMResponse:
     """
     A dataclass to represent the response from a language model provider.
     """
-    content: str
+    reasoning_content: Optional[str] = None
+    content: Optional[str] = None
+    stop_reason: Optional[str] = None
     tool_calls: Optional[list[Dict[str, Any]]] = None
+
+    def has_tool_calls(self) -> bool:
+        """
+        Check if the response contains tool calls.
+
+        :return: True if the response contains tool calls, False otherwise.
+        """
+        return self.tool_calls is not None and len(self.tool_calls) > 0
 
 class ProviderBase(ABC):
     """
@@ -21,14 +31,25 @@ class ProviderBase(ABC):
         self.api_url = api_url
 
     @abstractmethod
-    async def chat(self, messages: list[Dict[str, Any]], 
-                   tool_list: list[Dict[str, Any]]) -> Dict[str, Any]:
+    def chat(self, messages: list[Dict[str, Any]], 
+             tool_list: list[Dict[str, Any]]) -> LLMResponse:
         """
         Abstract method to send a chat message to the provider and receive a response.
         Must be implemented by all subclasses.
 
         :param messages: A list of messages to send to the provider.
         :param tool_list: A list of tools available for use.
-        :return: A dictionary containing the provider's response.
+        :return: A LLMResponse object containing the provider's response.
         """
         pass
+
+    def replace_empty_content(self, response: LLMResponse) -> LLMResponse:
+        """
+        Replace empty content with reasoning content if available.
+
+        :param response: The LLMResponse object to process.
+        :return: The processed LLMResponse object.
+        """
+        if response.content is None or response.content.strip() == "":
+            response.content = "(empty)"
+        return response
