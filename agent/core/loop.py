@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Callable
+from typing import List, Dict, Any, Callable, Optional
 from agent.provider.provider_base import ProviderBase, LLMResponse
 from agent.core.message import MessageBuilder
 from agent.tool import ToolBase
@@ -26,19 +26,25 @@ class ReActLoop:
 
 
     def run_loop(self, messages: List[Dict[str, Any]], 
-                 progress_callback: Callable[[LLMResponse], None]) -> LoopResult:
+                 progress_callback: Callable[[LLMResponse], None],
+                 thinking_callback: Optional[Callable[[], None]] = None) -> LoopResult:
 
         """
         Run the ReAct loop with the given messages.
 
         :param messages: A list of messages to send to the provider.
         :param progress_callback: A callback function to call with each response.
+        :param thinking_callback: A callback function to call when the model starts thinking.
         :return: The response from the provider.
         """
         self.is_running = True
         tool_schemas = [tool.to_openai_tool() for tool in self.tools]
         
         for _ in range(self.max_iter):
+            # Call thinking callback before making the API call
+            if thinking_callback:
+                thinking_callback()
+            
             response = self.provider.chat(messages, tool_schemas)
             
             if response.has_tool_calls():

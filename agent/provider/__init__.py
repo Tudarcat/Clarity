@@ -9,3 +9,7 @@ __all__ = [
     "LLMResponse",
     "DoubaoProvider"
 ]
+
+provider_type = {
+    "doubao": DoubaoProvider
+}

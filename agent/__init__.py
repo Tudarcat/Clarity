@@ -3,7 +3,7 @@ This module provides the core functionality for the agent system.
 """
 from agent.provider import ProviderBase, LLMResponse, DoubaoProvider
 from agent.tool import ToolBase, ToolParameter, ToolSchema
-from agent.tool import ReadFileTool, WriteFileTool, EditFileTool, ListDirectoryTool
+from agent.tool import ReadFileTool, WriteFileTool, EditFileTool, ListDirectoryTool, WebScraperTool
 
 __all__ = [
     "ProviderBase",
@@ -15,5 +15,6 @@ __all__ = [
     "ReadFileTool",
     "WriteFileTool",
     "EditFileTool",
-    "ListDirectoryTool"
+    "ListDirectoryTool",
+    "WebScraperTool"
 ]

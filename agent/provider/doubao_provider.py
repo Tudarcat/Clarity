@@ -5,12 +5,17 @@ from agent.provider.provider_base import ProviderBase, LLMResponse
 
 class DoubaoProvider(ProviderBase):
 
-    def __init__(self, api_key: str, api_url: str):
+    def __init__(self, api_key: str, api_url: str, model: str = ""):
         """
-        Initialize the DoubaoProvider with the given API key and URL.
+        Initialize the DoubaoProvider with the given API key, URL, and model.
+
+        :param api_key: The API key for authentication.
+        :param api_url: The base URL for the API.
+        :param model: The model name to use.
         """
         
         super().__init__(api_key, api_url)
+        self.model = model
 
         self.client = OpenAI(
             api_key=self.api_key,
@@ -26,7 +31,7 @@ class DoubaoProvider(ProviderBase):
         :return: A LLMResponse object containing the provider's response.
         """
         response = self.client.chat.completions.create(
-            model="ep-20260310201337-5k45l",
+            model=self.model,
             messages=messages,
             tools=tool_list if tool_list else None
         )
@@ -34,9 +39,10 @@ class DoubaoProvider(ProviderBase):
         choice = response.choices[0]
         content = choice.message.content or ""
         tool_calls = None
+        reasoning_content = None
         
         if hasattr(choice.message, 'reasoning_content') and choice.message.reasoning_content:
-            think_content = choice.message.reasoning_content
+            reasoning_content = choice.message.reasoning_content
         
         if choice.message.tool_calls:
             tool_calls = []
@@ -50,5 +56,4 @@ class DoubaoProvider(ProviderBase):
                     }
                 })
         
-        return LLMResponse(content=content, tool_calls=tool_calls, 
-                           reasoning_content=think_content, stop_reason=choice.finish_reason)
+        return LLMResponse(content=content, tool_calls=tool_calls, reasoning_content=reasoning_content)
