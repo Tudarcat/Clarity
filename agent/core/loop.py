@@ -1,3 +1,19 @@
+'''
+   Copyright 2026 Yunda Wu
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+'''
+
 from typing import List, Dict, Any, Callable, Optional
 from agent.provider.provider_base import ProviderBase, LLMResponse
 from agent.core.message import MessageBuilder
@@ -7,6 +23,8 @@ class LoopResult:
     def __init__(self, final_answer: str, messages: List[Dict[str, Any]]):
         self.final_answer = final_answer
         self.messages = messages
+        self.token_usage: Optional[Dict[str, int]] = None
+
 
 class ReActLoop:
     def __init__(self, provider: ProviderBase,
@@ -53,9 +71,9 @@ class ReActLoop:
             else:
                 progress_callback(response)
                 final_answer = response.content
-                return LoopResult(final_answer=final_answer, messages=messages)
+                return LoopResult(final_answer=final_answer, messages=messages, token_usage=response.token_usage)
         
-        return LoopResult(final_answer="", messages=messages)
+        return LoopResult(final_answer="", messages=messages, token_usage=response.token_usage)
 
     def _handle_tool_calls(self, messages: List[Dict[str, Any]], 
                            response: LLMResponse) -> List[Dict[str, Any]]:

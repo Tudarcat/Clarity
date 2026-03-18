@@ -1,3 +1,20 @@
+'''
+   Copyright 2026 Yunda Wu
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+'''
+
+
 """
 Main CLI application for Clarity Agent.
 """
@@ -7,17 +24,26 @@ import sys
 import typer
 from typing import Optional
 from pathlib import Path
-from rich.console import Console
 from rich.panel import Panel
+from rich.console import Console
 from rich.markdown import Markdown
-from rich.syntax import Syntax
 from rich import print as rprint
+
+# Try to import readline or use a fallback for Windows
+try:
+    import readline
+except ImportError:
+    # Windows fallback
+    try:
+        import pyreadline3 as readline
+    except ImportError:
+        readline = None
 
 from agent.provider.provider_base import LLMResponse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.provider import DoubaoProvider
+from agent.provider import CustomProvider
 from agent.core.loop import ReActLoop, LoopResult
 from agent.core.message import MessageBuilder
 from agent.tool import ReadFileTool, WriteFileTool, EditFileTool, ListDirectoryTool, WebScraperTool, ToolManager
@@ -30,6 +56,30 @@ app = typer.Typer(
 )
 
 console = Console()
+
+# Command completion for / commands
+COMMANDS = [
+    '/help',
+    '/exit',
+    '/quit',
+    '/clear',
+    '/config',
+    '/version'
+]
+
+def completer(text, state):
+    """Command completion function for readline."""
+    if not text:
+        return COMMANDS[state] if state < len(COMMANDS) else None
+    
+    matches = [cmd for cmd in COMMANDS if cmd.startswith(text)]
+    return matches[state] if state < len(matches) else None
+
+# Set up readline for command completion if available
+if readline:
+    readline.set_completer(completer)
+    if hasattr(readline, 'parse_and_bind'):
+        readline.parse_and_bind('tab: complete')
 
 
 class OutputFormatter:
@@ -44,9 +94,10 @@ class OutputFormatter:
         """
         Print 'Thinking...' indicator before model starts processing.
         """
-        console.print("[bold cyan]🤔 Thinking...[/bold cyan]", end="")
+        #console.print("[bold cyan]🤔 Thinking...[/bold cyan]", end="")
         OutputFormatter._thinking_printed = True
-    
+
+
     @staticmethod
     def clear_thinking():
         """
@@ -62,13 +113,7 @@ class OutputFormatter:
         Print thinking content with a distinct style.
         """
         OutputFormatter.clear_thinking()
-        console.print("\n")
-        console.print(Panel(
-            Markdown(content),
-            title="[bold blue]💭 Thinking[/bold blue]",
-            border_style="blue",
-            padding=(1, 2)
-        ))
+        console.print(f"\n[italic]{content}[/italic]")
     
     @staticmethod
     def print_content(content: str):
@@ -76,72 +121,128 @@ class OutputFormatter:
         Print regular content.
         """
         OutputFormatter.clear_thinking()
-        console.print("\n")
-        console.print(Panel(
-            Markdown(content),
-            title="[bold green]📝 Response[/bold green]",
-            border_style="green",
-            padding=(1, 2)
-        ))
+        console.print(f"\n[bold]●[/bold]")
+        console.print(Markdown(content))
     
     @staticmethod
     def print_tool_call(tool_name: str, tool_args: dict):
         """
-        Print tool call information.
+        Print tool call information in tree-like format.
         """
         OutputFormatter.clear_thinking()
-        console.print("\n")
-        args_str = ""
-        if tool_args:
-            for key, value in tool_args.items():
-                if isinstance(value, str) and len(value) > 100:
-                    value = value[:100] + "..."
-                args_str += f"  • {key}: {value}\n"
         
-        console.print(Panel(
-            args_str.strip() or "No arguments",
-            title=f"[bold yellow]🔧 Tool Call: {tool_name}[/bold yellow]",
-            border_style="yellow",
-            padding=(1, 2)
-        ))
+        if tool_name == "update_task":
+            # Special formatting for update_task tool
+            console.print("\n[bold cyan]📋 Task Plan Updated[/bold cyan]")
+            console.print("-" * console.width, style="cyan")
+            
+            # Extract task information
+            task = tool_args.get("task", "")
+            steps = tool_args.get("steps", [])
+            success_criteria = tool_args.get("success_criteria", "")
+            
+            # Print task and success criteria
+            console.print(f"[bold]Task:[/bold] {task}")
+            console.print(f"[bold]Success Criteria:[/bold] {success_criteria}")
+            console.print("")
+            
+            # Print steps
+            console.print("[bold]Steps:[/bold]")
+            for i, step in enumerate(steps, 1):
+                status = step.get("status", "pending")
+                description = step.get("description", "")
+                tool = step.get("tool", "")
+                
+                # Status colors
+                status_colors = {
+                    "completed": "green",
+                    "pending": "yellow",
+                    "in_progress": "blue",
+                    "failed": "red",
+                    "skipped": "gray"
+                }
+                status_color = status_colors.get(status, "yellow")
+                
+                # Print step
+                step_line = f"  {i}. [{status_color}][{status.upper()}][/{status_color}] {description}"
+                if tool:
+                    step_line += f" [dim](Tool: {tool})[/dim]"
+                console.print(step_line)
+            
+            console.print("-" * console.width, style="cyan")
+        else:
+            # Regular tool call formatting
+            console.print(f"\n[bold]● {tool_name}[/bold]")
+            
+            if tool_args:
+                items = list(tool_args.items())
+                for i, (key, value) in enumerate(items):
+                    is_last = i == len(items) - 1
+                    branch = "└──" if is_last else "├──"
+                    
+                    if isinstance(value, str) and len(value) > 50:
+                        value = value[:50] + "..."
+                    console.print(f"  {branch} [dim]{key}:[/dim] {value}")
     
     @staticmethod
     def print_tool_result(tool_name: str, result: str):
         """
         Print tool execution result.
         """
-        console.print("\n")
-        if len(result) > 500:
-            display_result = result[:500] + "\n... (truncated)"
+        if len(result) > 300:
+            display_result = result[:300] + "..."
         else:
             display_result = result
-        
-        console.print(Panel(
-            display_result,
-            title=f"[bold magenta]📋 Tool Result: {tool_name}[/bold magenta]",
-            border_style="magenta",
-            padding=(1, 2)
-        ))
+        console.print(f"[dim]→ {display_result}[/dim]")
     
     @staticmethod
     def print_error(message: str):
         """
         Print error message.
         """
-        console.print("\n")
-        console.print(Panel(
-            message,
-            title="[bold red]❌ Error[/bold red]",
-            border_style="red",
-            padding=(1, 2)
-        ))
+        console.print(f"\n[bold red]❌ Error:[/bold red] {message}")
     
     @staticmethod
     def print_system(message: str):
         """
         Print system message.
         """
-        console.print(f"\n[bold cyan]ℹ️  {message}[/bold cyan]")
+        console.print(f"\n[cyan]ℹ️ {message}[/cyan]")
+    
+    @staticmethod
+    def print_analysis(analysis):
+        """
+        Print task complexity analysis.
+        """
+        strategy_color = "green" if analysis.recommended_strategy == LoopStrategy.REACT else "yellow"
+        strategy_icon = "⚡" if analysis.recommended_strategy == LoopStrategy.REACT else "📋"
+        
+        console.print(f"\n[bold]🔍 Analysis:[/bold] [{strategy_color}]{strategy_icon} {analysis.recommended_strategy.value.upper()}[/{strategy_color}] | "
+                      f"Steps: {analysis.estimated_steps} | "
+                      f"Confidence: {analysis.confidence:.0%}")
+    
+    @staticmethod
+    def print_plan(plan):
+        """
+        Print execution plan using simple list format.
+        """
+        console.print(f"\n[yellow]📋 Plan:[/yellow] [bold]{plan.task}[/bold]")
+        
+        for step in plan.steps:
+            status_icons = {
+                "pending": "⏳",
+                "in_progress": "🔄",
+                "completed": "✅",
+                "failed": "❌",
+                "skipped": "⏭️"
+            }
+            status = step.status.value if hasattr(step.status, 'value') else str(step.status)
+            icon = status_icons.get(status, "⏳")
+            tool_str = f" [dim]({step.tool})[/dim]" if step.tool else ""
+            console.print(f"  {icon} {step.id}. {step.description}{tool_str}")
+        
+        completed, total = plan.get_progress()
+        console.print(f"[dim]   Progress: {completed}/{total}[/dim]")
 
 
 def get_tools():
@@ -213,13 +314,23 @@ def progress_callback(response: LLMResponse):
             OutputFormatter.print_tool_call(tool_name, tool_args)
 
 
-def run_agent(user_input: str, provider: DoubaoProvider, messages: list, tools: list, system_message: str = None, max_iter: int = 20) -> LoopResult:
+def run_agent(
+    user_input: str, 
+    provider: CustomProvider, 
+    messages: list, 
+    tools: list, 
+    system_message: str = None, 
+    max_iter: int = 20
+) -> LoopResult:
     """
-    Run the agent with the given input.
+    Run the agent with the given input using ReAct loop.
     """
 
     context = MessageBuilder(work_dir=os.getcwd())
-
+    
+    # Use ReAct loop
+    OutputFormatter.print_system("Processing task...")
+    
     if system_message and len(messages) == 0:
         messages.append({
             "role": "system",
@@ -328,6 +439,7 @@ def chat(
     
     tools = ToolManager.get_tools_list()
     messages = []
+    token_usage: int = 0
     
     message_builder = MessageBuilder(work_dir=final_work_dir)
     system_message = message_builder.build_system_message()
@@ -336,9 +448,10 @@ def chat(
     console.print(Panel(
         "[bold cyan]Welcome to Clarity Agent![/bold cyan]\n\n"
         "Type your message and press Enter to chat.\n"
-        "Type [bold yellow]'exit'[/bold yellow] or [bold yellow]'quit'[/bold yellow] to exit.\n"
-        "Type [bold yellow]'clear'[/bold yellow] to clear the conversation.\n"
-        "Type [bold yellow]'help'[/bold yellow] for more commands.",
+        "Type [bold yellow]/exit[/bold yellow] or [bold yellow]/quit[/bold yellow] to exit.\n"
+        "Type [bold yellow]/clear[/bold yellow] to clear the conversation.\n"
+        "Type [bold yellow]/help[/bold yellow] for more commands.\n"
+        "Press [bold yellow]Tab[/bold yellow] for command suggestions.",
         title="[bold green]🤖 Clarity Agent[/bold green]",
         border_style="green",
         padding=(1, 2)
@@ -349,43 +462,106 @@ def chat(
     
     while True:
         try:
-            console.print("\n[bold cyan]You:[/bold cyan] ", end="")
+            # Print Claude Code style input box
+            console.print("─" * console.width, style="cyan")
+            console.print("[bold cyan]>[/bold cyan] ", end="")
             user_input = input().strip()
+            console.print("─" * console.width, style="cyan")
             
             if not user_input:
                 continue
             
-            if user_input.lower() in ["exit", "quit"]:
-                OutputFormatter.print_system("Goodbye! 👋")
-                break
-            
-            if user_input.lower() == "clear":
-                messages = []
-                console.clear()
-                OutputFormatter.print_system("Conversation cleared.")
+            # Handle commands with / prefix
+            if user_input.startswith('/'):
+                # Split into command and arguments
+                parts = user_input[1:].split(' ', 1)
+                command = parts[0].lower()
+                args = parts[1].strip() if len(parts) > 1 else ''
+                
+                if command in ["exit", "quit"]:
+                    OutputFormatter.print_system("Goodbye! 👋")
+                    break
+                
+                if command == "clear":
+                    messages = []
+                    console.clear()
+                    OutputFormatter.print_system("Conversation cleared.")
+                    continue
+                
+                if command == "help":
+                    console.print(Panel(
+                        "[bold]Commands:[/bold]\n"
+                        "  • [yellow]/exit[/yellow] - Exit the chat\n"
+                        "  • [yellow]/quit[/yellow] - Exit the chat\n"
+                        "  • [yellow]/clear[/yellow] - Clear the conversation history\n"
+                        "  • [yellow]/help[/yellow] - Show this help message\n"
+                        "  • [yellow]/config[/yellow] - Show configuration\n"
+                        "  • [yellow]/version[/yellow] - Show version\n\n"
+                        "[bold]Available Tools:[/bold]\n"
+                        "  • [green]read_file[/green] - Read file contents\n"
+                        "  • [green]write_file[/green] - Write content to a file\n"
+                        "  • [green]edit_file[/green] - Edit a file\n"
+                        "  • [green]list_directory[/green] - List directory contents\n"
+                        "  • [green]web_scraper[/green] - Scrape web content",
+                        title="[bold blue]📖 Help[/bold blue]",
+                        border_style="blue"
+                    ))
+                    continue
+                
+                if command == "config":
+                    # Show configuration
+                    if not config_manager:
+                        config_manager = ConfigManager()
+                    try:
+                        config = config_manager.load_config()
+                        if config:
+                            # Mask API key for privacy
+                            api_key_display = "[hidden]" if config.provider.api_key else "[not set]"
+                            if config.provider.api_key and len(config.provider.api_key) > 8:
+                                api_key_display = config.provider.api_key[:4] + "****" + config.provider.api_key[-4:]
+                            
+                            console.print(Panel(
+                                f"Provider Type: {config.provider.provider_type}\n"
+                                f"Model: {config.provider.model}\n"
+                                f"API URL: {config.provider.api_url}\n"
+                                f"API Key: {api_key_display}\n"
+                                f"Work Directory: {config.work_dir}\n"
+                                f"Max Iterations: {config.max_iter}",
+                                title="[bold blue]📋 Current Configuration[/bold blue]",
+                                border_style="blue"
+                            ))
+                        else:
+                            OutputFormatter.print_error(f"No configuration found at {config_manager.get_config_path()}")
+                            OutputFormatter.print_system("Use 'config create' to create a new configuration.")
+                    except Exception as e:
+                        OutputFormatter.print_error(f"Failed to load configuration: {str(e)}")
+                    continue
+                
+                if command == "version":
+                    console.print("[bold green]Clarity Agent v0.1.0[/bold green]")
+                    continue
+                
+                # Unknown command
+                OutputFormatter.print_error(f"Unknown command: {user_input}")
+                OutputFormatter.print_system("Type /help for a list of available commands.")
                 continue
             
-            if user_input.lower() == "help":
-                console.print(Panel(
-                    "[bold]Commands:[/bold]\n"
-                    "  • [yellow]exit/quit[/yellow] - Exit the chat\n"
-                    "  • [yellow]clear[/yellow] - Clear the conversation history\n"
-                    "  • [yellow]help[/yellow] - Show this help message\n\n"
-                    "[bold]Available Tools:[/bold]\n"
-                    "  • [green]read_file[/green] - Read file contents\n"
-                    "  • [green]write_file[/green] - Write content to a file\n"
-                    "  • [green]edit_file[/green] - Edit a file\n"
-                    "  • [green]list_directory[/green] - List directory contents",
-                    title="[bold blue]📖 Help[/bold blue]",
-                    border_style="blue"
-                ))
+            # check if token usage exceeds max tokens
+            if token_usage > provider.get_max_tokens() * 0.80:
+                # compress
+                
                 continue
-            
+
+            # Handle regular input
             result = run_agent(user_input, provider, messages, tools, system_message, final_max_iter)
+            
+            # count token usage
+            if result.token_usage:
+                token_usage = result.token_usage["total_tokens"]
             
         except KeyboardInterrupt:
             console.print("\n")
-            OutputFormatter.print_system("Interrupted. Type 'exit' to quit.")
+            OutputFormatter.print_system("Interrupted. Type /exit to quit.")
             continue
         except Exception as e:
             OutputFormatter.print_error(f"An error occurred: {str(e)}")

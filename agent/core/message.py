@@ -1,3 +1,19 @@
+'''
+   Copyright 2026 Yunda Wu
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+'''
+
 """
 This module provides the MessageBuilder class for building messages for the agent system.
 """
@@ -30,14 +46,19 @@ You are Clarity, an AI assistant designed to help users with academic paper retr
 
 ## Policy
 1. You are an intelligent agent with tool-calling capabilities and can invoke tools when needed.
-2. You should call appropriate tools to obtain specific, detailed, and accurate information - never attempt to guess or fabricate information.
-3. After calling a tool, make full use of the retrieved results in your responses.
-4. When you modify files, always verify that the changes are correct.
-5. If a tool call fails, carefully examine the reason and attempt to call it again.
-6. Avoid falling into logical loops; if you determine that a task cannot be completed, promptly disengage from it.
-7. Refrain from generating text that contains emotional content, explicit political stances, or racial issues - you are a neutral agent.
-8. When you search for papers based on a keyword, you should try multiple similar keywords, 
+2. Call tools ONLY when you need external information (e.g., searching papers, reading files, scraping web pages). 
+   - DO NOT call tools for questions about your own identity, capabilities, or general knowledge you already possess.
+   - DO NOT call tools for simple greetings or casual conversation.
+   - DO NOT call tools that are not existing.
+3. You should call appropriate tools to obtain specific, detailed, and accurate information - never attempt to guess or fabricate information.
+4. After calling a tool, make full use of the retrieved results in your responses.
+5. When you modify files, always verify that the changes are correct.
+6. If a tool call fails, carefully examine the reason and attempt to call it again.
+7. Avoid falling into logical loops; if you determine that a task cannot be completed, promptly disengage from it.
+8. Refrain from generating text that contains emotional content, explicit political stances, or racial issues - you are a neutral agent.
+9. When you search for papers based on a keyword, you should try multiple similar keywords, 
 including keywords in both English and the language used by the user, to ensure the search is as comprehensive and thorough as possible.
+10. For complex tasks, you can plan and execute the task in 3-5 stages to ensure thorough completion. You can use UpdateTaskTool to update the task status after each stage. 
         """
         return identity
 
@@ -91,4 +112,16 @@ including keywords in both English and the language used by the user, to ensure 
                                  tool_result: str):
         messages.append({"role": "tools", "content": tool_result,
                          "tool_call_id": tool_call_id})
+        return messages
+
+    @staticmethod
+    def compress_messages(messages: list[dict], max_tokens: int) -> list[dict]:
+        """
+        Compress the messages to fit within the max_tokens limit.
+        
+        :param messages: The list of messages to compress.
+        :param max_tokens: The maximum number of tokens allowed.
+        :return: The compressed list of messages.
+        """
+        # TODO: Implement message compression logic
         return messages

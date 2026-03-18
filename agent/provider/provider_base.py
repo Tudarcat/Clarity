@@ -1,3 +1,20 @@
+'''
+   Copyright 2026 Yunda Wu
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+'''
+
+
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 from dataclasses import dataclass
@@ -11,6 +28,7 @@ class LLMResponse:
     content: Optional[str] = None
     stop_reason: Optional[str] = None
     tool_calls: Optional[list[Dict[str, Any]]] = None
+    token_usage: Optional[Dict[str, int]] = None
 
     def has_tool_calls(self) -> bool:
         """
@@ -53,3 +71,13 @@ class ProviderBase(ABC):
         if response.content is None or response.content.strip() == "":
             response.content = "(empty)"
         return response
+
+    @abstractmethod
+    def get_max_tokens(self) -> int:
+        """
+        Abstract method to get the maximum number of tokens the provider can handle.
+        Must be implemented by all subclasses.
+
+        :return: The maximum number of tokens.
+        """
+        pass
