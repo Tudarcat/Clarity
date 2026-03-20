@@ -20,10 +20,10 @@ from agent.core.message import MessageBuilder
 from agent.tool import ToolBase
 
 class LoopResult:
-    def __init__(self, final_answer: str, messages: List[Dict[str, Any]]):
+    def __init__(self, final_answer: str, messages: List[Dict[str, Any]], token_usage: Optional[Dict[str, int]] = None):
         self.final_answer = final_answer
         self.messages = messages
-        self.token_usage: Optional[Dict[str, int]] = None
+        self.token_usage: Optional[Dict[str, int]] = token_usage
 
 
 class ReActLoop:

@@ -1,64 +1,84 @@
+from typing import List, Dict, Any
 from agent.provider.provider_base import ProviderBase
 
 class Summary:
     def __init__(self, provider: ProviderBase):
         self.provider = provider
 
-    def _summarize(self, message: list[dict]) -> str:
+    def _build_summary_message(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Summarize the message.
+        Build the summary message.
         
-        :param message: The message to summarize.
-        :return: The summarized message.
+        :param messages: The list of messages to build summary from.
+        :return: The summary message.
         """
-        # TODO: Implement summary logic
-        return ""
-
-    def _get_summary_prompt(self, messages: list[dict]) -> str:
-        """
-        Get the summary prompt.
-        
-        :param messages: The list of messages to summarize.
-        :return: The summary prompt.
-        """
-        prompt = """
+        dialogue_text = ""
+        for message in messages:
+            role = message["role"]
+            content = message.get("content", "")
+            if message.get("tool_calls"):
+                tool_names = [t.get("function", {}).get("name") for t in message.get("tool_calls", [])]
+                content += f" Tool Calls: {tool_names}"
+            dialogue_text += f"{role}: {content}\n"
+        summary_prompt = f"""
 # Task: Dialogue History Compression and Key Information Extraction
 
-You are an efficient dialogue summarizer. Your task is to compress the input dialogue history into a high information-density summary, which can replace the original history for continued LLM reference.
+You are an efficient dialogue summarizer. Your task is to compress the input dialogue history into a high information-density summary.
 
-# Input Format
-A multi-turn dialogue will be provided. Each turn includes both the user's input and the LLM Agent's response.
+# Dialogue History to Summarize:
+{dialogue_text}
 
+# {self._get_summary_instructions()}
+"""
+        
+        return [
+            {"role": "system", "content": "You are a precise dialogue summarizer."},
+            {"role": "user", "content": summary_prompt}
+        ]
+
+    def _get_summary_instructions(self) -> str:
+        """
+        Get the summary instructions.
+        """
+        return """
 # Output Requirements
 Please generate a **structured summary report** containing the following two parts:
 
 **1. Core Fact Extraction (Key Information)**
-
-*   **Confirmed Facts**: List all entity information confirmed during the dialogue. Examples: person names, article/literature titles, dates, specific numerical values, preference choices, etc.
-*   **User's Core Objective**: Summarize in one sentence what the user aims to achieve through the Agent.
-*   **Completed Steps**: Provide a bullet-point list of key actions that have been executed (e.g., password verified, report draft generated).
-*   **Pending/To-be-Confirmed Items**: Provide a bullet-point list of matters still waiting or not yet completed.
+- **Confirmed Facts**: List all entity information confirmed during the dialogue. Examples: person names, article/literature titles, dates, specific numerical values, preference choices, etc.
+- **User's Core Objective**: Summarize in one sentence what the user aims to achieve through the Agent.
+- **Completed Steps**: Provide a bullet-point list of key actions that have been executed.
+- **Pending/To-be-Confirmed Items**: Provide a bullet-point list of matters still waiting or not yet completed.
 
 **2. Dialogue Context Summary (Maintaining Coherence)**
-
-*   Summarize each semantically complete dialogue turn. If multiple consecutive turns discuss the same sub-topic, they can be merged into a single summary entry.
-*   Summaries should connect the reasoning logic, rather than being a chronological log.
+- Summarize each semantically complete dialogue turn. If multiple consecutive turns discuss the same sub-topic, merge them into a single summary entry.
+- Summaries should connect the reasoning logic, rather than being a chronological log.
 
 # Constraints
+- **Ignore Internal Details**: Remove specific parameters of tool calls. But important tool results should be included in "Confirmed Facts".
+- **Length Control**: Keep the summary concise but comprehensive.
+- **Fidelity**: Do not add information not present in the dialogue.
+"""
 
-*   **Ignore Internal Details**: Remove specific parameters of tool calls and API request processes. However, if a tool returns important data (such as API query results), that data should be included in the "Core Facts."
-*   **Length Control**: The total output length should be controlled to 20%~30% of the original text. If the original text is extremely short (<200 Tokens), preserve the key information completely without forced compression.
-*   **Fidelity**: It is strictly forbidden to add information that does not exist in the dialogue. If speculation is necessary, it must be noted as "[speculation]".
-
-        """
-        return prompt
-
-    def summarize(self, messages: list[dict]) -> str:
+    def summarize(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Summarize the messages.
         
         :param messages: The list of messages to summarize.
         :return: The summarized message.
         """
-        # TODO: Implement summary logic
-        return ""
+        summary_messages = self._build_summary_message(messages)
+        try:
+            response = self.provider.chat(messages=summary_messages)
+            summary_content = response.content
+            compressed_messages = [
+                {"role": "system", "content": f"[Dialogue has been compressed.] There are compressed messages. {summary_content} . Please continue the conversation based on the compressed messages."}
+            ]
+            if len(messages) >= 4:
+                compressed_messages += messages[-3:]
+            else:
+                compressed_messages += messages
+            return compressed_messages
+        except Exception as e:
+            print(f"Error summarizing messages: {e}")
+            return messages

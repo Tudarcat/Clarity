@@ -132,50 +132,58 @@ class OutputFormatter:
         OutputFormatter.clear_thinking()
         
         if tool_name == "update_task":
-            # Special formatting for update_task tool
             console.print("\n[bold cyan]📋 Task Plan Updated[/bold cyan]")
             console.print("-" * console.width, style="cyan")
             
-            # Extract task information
-            task = tool_args.get("task", "")
-            steps = tool_args.get("steps", [])
-            success_criteria = tool_args.get("success_criteria", "")
+            if isinstance(tool_args, dict):
+                task = tool_args.get("task", "")
+                steps = tool_args.get("steps", [])
+                success_criteria = tool_args.get("success_criteria", "")
+            else:
+                console.print(f"[bold]Raw Arguments:[/bold] {tool_args}")
+                console.print("-" * console.width, style="cyan")
+                return
             
-            # Print task and success criteria
             console.print(f"[bold]Task:[/bold] {task}")
             console.print(f"[bold]Success Criteria:[/bold] {success_criteria}")
             console.print("")
             
-            # Print steps
             console.print("[bold]Steps:[/bold]")
-            for i, step in enumerate(steps, 1):
-                status = step.get("status", "pending")
-                description = step.get("description", "")
-                tool = step.get("tool", "")
-                
-                # Status colors
-                status_colors = {
-                    "completed": "green",
-                    "pending": "yellow",
-                    "in_progress": "blue",
-                    "failed": "red",
-                    "skipped": "gray"
-                }
-                status_color = status_colors.get(status, "yellow")
-                
-                # Print step
-                step_line = f"  {i}. [{status_color}][{status.upper()}][/{status_color}] {description}"
-                if tool:
-                    step_line += f" [dim](Tool: {tool})[/dim]"
-                console.print(step_line)
+            if not isinstance(steps, list):
+                console.print(f"  [red]Error: steps is not a list[/red]")
+            else:
+                for i, step in enumerate(steps, 1):
+                    if isinstance(step, str):
+                        console.print(f"  {i}. [yellow][PENDING][/yellow] {step}")
+                        continue
+                    if not isinstance(step, dict):
+                        console.print(f"  {i}. [red]Error: step is not a dict - {type(step)}[/red]")
+                        continue
+                    
+                    status = step.get("status", "pending")
+                    description = step.get("description", "")
+                    tool = step.get("tool", "")
+                    
+                    status_colors = {
+                        "completed": "green",
+                        "pending": "yellow",
+                        "in_progress": "blue",
+                        "failed": "red",
+                        "skipped": "gray"
+                    }
+                    status_color = status_colors.get(status, "yellow")
+                    
+                    step_line = f"  {i}. [{status_color}][{status.upper()}][/{status_color}] {description}"
+                    if tool:
+                        step_line += f" [dim](Tool: {tool})[/dim]"
+                    console.print(step_line)
             
             console.print("-" * console.width, style="cyan")
         else:
-            # Regular tool call formatting
             console.print(f"\n[bold]● {tool_name}[/bold]")
             
             if tool_args:
-                items = list(tool_args.items())
+                items = list(tool_args.items()) if isinstance(tool_args, dict) else []
                 for i, (key, value) in enumerate(items):
                     is_last = i == len(items) - 1
                     branch = "└──" if is_last else "├──"
@@ -549,8 +557,20 @@ def chat(
             # check if token usage exceeds max tokens
             if token_usage > provider.get_max_tokens() * 0.80:
                 # compress
-                
-                continue
+                from agent.summary import Summary
+                summary = Summary(provider)
+                # clear messages
+                messages.clear()
+                messages = [
+                    {
+                    "role": "system",
+                    "content": system_message
+                    }
+                ]
+                messages += summary.summarize(messages)
+                # OutputFormatter.print_system(str(messages))
+                token_usage = 0
+                OutputFormatter.print_system("Conversation compressed.")
 
             # Handle regular input
             result = run_agent(user_input, provider, messages, tools, system_message, final_max_iter)

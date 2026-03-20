@@ -50,7 +50,7 @@ class ProviderBase(ABC):
 
     @abstractmethod
     def chat(self, messages: list[Dict[str, Any]], 
-             tool_list: list[Dict[str, Any]]) -> LLMResponse:
+             tool_list: list[Dict[str, Any]] = []) -> LLMResponse:
         """
         Abstract method to send a chat message to the provider and receive a response.
         Must be implemented by all subclasses.

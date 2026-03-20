@@ -28,6 +28,7 @@ from agent.tool.file_tools import ReadFileTool
 from agent.tool.file_tools import WriteFileTool
 from agent.tool.file_tools import ListDirectoryTool
 from agent.tool.task_tools import UpdateTaskTool
+from agent.tool.pdf_tools import ReadPDFTool
 
 class ToolManager:
     """
@@ -42,6 +43,7 @@ class ToolManager:
         ListDirectoryTool(),
         PaperSearchTool(),
         UpdateTaskTool(),
+        ReadPDFTool(),
     ]
     tools_dict = {tool.name: tool for tool in tools_list}
     
