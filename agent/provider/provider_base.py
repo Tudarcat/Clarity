@@ -18,6 +18,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 from dataclasses import dataclass
+import asyncio
 
 @dataclass
 class LLMResponse:
@@ -60,6 +61,19 @@ class ProviderBase(ABC):
         :return: A LLMResponse object containing the provider's response.
         """
         pass
+
+    async def achat(self, messages: list[Dict[str, Any]], 
+                    tool_list: list[Dict[str, Any]] = []) -> LLMResponse:
+        """
+        Async method to send a chat message to the provider and receive a response.
+        Default implementation wraps the sync chat() method in asyncio.to_thread().
+        Subclasses should override this with a native async implementation if possible.
+
+        :param messages: A list of messages to send to the provider.
+        :param tool_list: A list of tools available for use.
+        :return: A LLMResponse object containing the provider's response.
+        """
+        return await asyncio.to_thread(self.chat, messages, tool_list)
 
     def replace_empty_content(self, response: LLMResponse) -> LLMResponse:
         """
