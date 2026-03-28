@@ -16,9 +16,21 @@
 
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
 from dataclasses import dataclass
 import asyncio
+
+@dataclass
+class StreamingPart:
+    """
+    A dataclass to represent a part of a streaming response.
+    """
+    reasoning_delta: Optional[str] = None
+    content_delta: Optional[str] = None
+
+    def __init__(self, reasoning_delta: Optional[str] = None, content_delta: Optional[str] = None):
+        self.reasoning_delta = reasoning_delta
+        self.content_delta = content_delta
 
 @dataclass
 class LLMResponse:
@@ -51,19 +63,25 @@ class ProviderBase(ABC):
 
     @abstractmethod
     def chat(self, messages: list[Dict[str, Any]], 
-             tool_list: list[Dict[str, Any]] = []) -> LLMResponse:
+             tool_list: list[Dict[str, Any]] = [], 
+             streaming: bool = False, 
+             stream_callback: Optional[Callable[[StreamingPart], None]] = None) -> LLMResponse:
         """
         Abstract method to send a chat message to the provider and receive a response.
         Must be implemented by all subclasses.
 
         :param messages: A list of messages to send to the provider.
         :param tool_list: A list of tools available for use.
+        :param streaming: Whether to enable streaming mode.
+        :param stream_callback: A callback to be called for each part of the streaming response.
         :return: A LLMResponse object containing the provider's response.
         """
         pass
 
     async def achat(self, messages: list[Dict[str, Any]], 
-                    tool_list: list[Dict[str, Any]] = []) -> LLMResponse:
+                    tool_list: list[Dict[str, Any]] = [], 
+                    streaming: bool = False, 
+                    stream_callback: Optional[Callable[[StreamingPart], None]] = None) -> LLMResponse:
         """
         Async method to send a chat message to the provider and receive a response.
         Default implementation wraps the sync chat() method in asyncio.to_thread().
@@ -71,9 +89,11 @@ class ProviderBase(ABC):
 
         :param messages: A list of messages to send to the provider.
         :param tool_list: A list of tools available for use.
+        :param streaming: Whether to enable streaming mode.
+        :param stream_callback: A callback to be called for each part of the streaming response.
         :return: A LLMResponse object containing the provider's response.
         """
-        return await asyncio.to_thread(self.chat, messages, tool_list)
+        return await asyncio.to_thread(self.chat, messages, tool_list, streaming, stream_callback)
 
     def replace_empty_content(self, response: LLMResponse) -> LLMResponse:
         """

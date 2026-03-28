@@ -16,7 +16,7 @@
 
 from typing import List, Dict, Any, Callable, Optional
 import asyncio
-from agent.provider.provider_base import ProviderBase, LLMResponse
+from agent.provider.provider_base import ProviderBase, LLMResponse, StreamingPart
 from agent.core.message import MessageBuilder
 from agent.tool import ToolBase
 
@@ -46,7 +46,10 @@ class ReActLoop:
 
     def run_loop(self, messages: List[Dict[str, Any]], 
                  progress_callback: Callable[[LLMResponse], None],
-                 thinking_callback: Optional[Callable[[], None]] = None) -> LoopResult:
+                 thinking_callback: Optional[Callable[[], None]] = None, 
+                 streaming: bool = False,
+                 stream_callback: Optional[Callable[[StreamingPart], None]] = None
+                 ) -> LoopResult:
 
         """
         Run the ReAct loop with the given messages.
@@ -64,7 +67,7 @@ class ReActLoop:
             if thinking_callback:
                 thinking_callback()
             
-            response = self.provider.chat(messages, tool_schemas)
+            response = self.provider.chat(messages, tool_schemas, streaming, stream_callback)
             
             if response.has_tool_calls():
                 progress_callback(response)
@@ -78,7 +81,10 @@ class ReActLoop:
 
     async def arun_loop(self, messages: List[Dict[str, Any]], 
                         progress_callback: Callable[[LLMResponse], None],
-                        thinking_callback: Optional[Callable[[], None]] = None) -> LoopResult:
+                        thinking_callback: Optional[Callable[[], None]] = None, 
+                        streaming: bool = False,
+                        stream_callback: Optional[Callable[[StreamingPart], None]] = None
+                        ) -> LoopResult:
         """
         Async version of run_loop. Run the ReAct loop with the given messages.
 
@@ -94,7 +100,7 @@ class ReActLoop:
             if thinking_callback:
                 thinking_callback()
             
-            response = await self.provider.achat(messages, tool_schemas)
+            response = await self.provider.achat(messages, tool_schemas, streaming, stream_callback)
             
             if response.has_tool_calls():
                 progress_callback(response)
