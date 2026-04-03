@@ -29,6 +29,7 @@ from agent.tool.file_tools import WriteFileTool
 from agent.tool.file_tools import ListDirectoryTool
 from agent.tool.task_tools import UpdateTaskTool
 from agent.tool.pdf_tools import ReadPDFTool
+from agent.tool.knowledge_repo import KnowledgeRepo
 
 class ToolManager:
     """
@@ -44,7 +45,8 @@ class ToolManager:
         PaperSearchTool(),
         UpdateTaskTool(),
         ReadPDFTool(),
-    ]
+        KnowledgeRepo()
+    ]   
     tools_dict = {tool.name: tool for tool in tools_list}
     
     def __init__(self):

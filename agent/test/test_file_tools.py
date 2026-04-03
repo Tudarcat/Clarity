@@ -3,7 +3,7 @@ Test the file tools.
 """
 import os
 import tempfile
-from agent.tool import ReadFileTool, WriteFileTool, EditFileTool, ListDirectoryTool
+from agent.tool import ReadFileTool, WriteFileTool, EditFileTool, ListDirectoryTool, KnowledgeRepo  
 
 
 def test_write_and_read_file():
@@ -77,7 +77,7 @@ def test_tool_schema():
     print("Testing Tool Schemas")
     print("=" * 50)
     
-    tools = [ReadFileTool(), WriteFileTool(), EditFileTool(), ListDirectoryTool()]
+    tools = [ReadFileTool(), WriteFileTool(), EditFileTool(), ListDirectoryTool(), KnowledgeRepo()]
     
     for tool in tools:
         schema = tool.to_openai_tool()
