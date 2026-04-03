@@ -22,6 +22,7 @@ This module provides the base class for tools in the agent system.
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 from dataclasses import dataclass, field
+import asyncio
 
 
 @dataclass
@@ -140,11 +141,21 @@ class ToolBase(ABC):
     def execute(self, **kwargs) -> str:
         """
         Execute the tool with the given parameters.
-        
+
         :param kwargs: The parameters for the tool.
         :return: The result of the tool execution as a string.
         """
         pass
+
+    async def aexecute(self, **kwargs) -> str:
+        """
+        Async version of execute. Default implementation wraps execute() in asyncio.to_thread().
+        Override this method in subclasses for native async implementation.
+
+        :param kwargs: The parameters for the tool.
+        :return: The result of the tool execution as a string.
+        """
+        return await asyncio.to_thread(self.execute, **kwargs)
 
     def validate_parameters(self, **kwargs) -> bool:
         """

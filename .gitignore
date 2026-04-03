@@ -16,3 +16,7 @@ Thumbs.db
 
 # waste files
 trash/
+
+# test files
+agent/test/
+test/

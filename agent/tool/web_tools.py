@@ -26,6 +26,11 @@ from urllib import request, parse
 from urllib.error import HTTPError, URLError
 from typing import List, Dict, Any, Optional
 from agent.tool.tool_base import ToolBase, ToolParameter
+try:
+    from _version import __version__
+except ImportError:
+    __version__ = "1.0.0"
+
 
 
 class WebScraperTool(ToolBase):
@@ -214,7 +219,7 @@ class PaperSearchTool(ToolBase):
 
     @property
     def description(self) -> str:
-        return "Search for academic papers using Crossref API. Returns paper titles, authors, years, and DOIs."
+        return "Search for academic papers using Crossref API. Supports general query, author query, title query, and filters. Returns paper titles, authors, years, DOIs, and more."
 
     @property
     def parameters(self) -> List[ToolParameter]:
@@ -222,8 +227,26 @@ class PaperSearchTool(ToolBase):
             ToolParameter(
                 name="query",
                 type="string",
-                description="Search query string (keywords, title, author, etc.)",
-                required=True
+                description="General search query string (fuzzy search across all fields).",
+                required=False
+            ),
+            ToolParameter(
+                name="author",
+                type="string",
+                description="Author name to search for ( searches in author family/given names).",
+                required=False
+            ),
+            ToolParameter(
+                name="title",
+                type="string",
+                description="Title keywords to search for.",
+                required=False
+            ),
+            ToolParameter(
+                name="filter",
+                type="string",
+                description="Filter string in format 'key:value,key:value'. Supported filters: from-pub-date, until-pub-date, from-issued-date, until-issued-date, type, publisher, journal, issn, isbn, doi, funder, prefix, article-number, volume, issue, page, ORCID, member. Example: 'from-pub-date:2020-01-01,type:journal-article'",
+                required=False
             ),
             ToolParameter(
                 name="rows",
@@ -242,7 +265,7 @@ class PaperSearchTool(ToolBase):
             ToolParameter(
                 name="sort",
                 type="string",
-                description="Sort order: 'relevance', 'published', 'published-print', etc. Default is 'relevance'.",
+                description="Sort order: 'relevance', 'published', 'published-print', 'published-online', 'issued', 'created', 'updated'. Default is 'relevance'.",
                 required=False,
                 default="relevance"
             ),
@@ -252,50 +275,109 @@ class PaperSearchTool(ToolBase):
                 description="Sort direction: 'asc' or 'desc'. Default is 'desc'.",
                 required=False,
                 default="desc"
+            ),
+            ToolParameter(
+                name="select",
+                type="string",
+                description="Comma-separated list of fields to return. Example: 'DOI,title,author,published'. Default returns all fields.",
+                required=False
             )
         ]
 
     def execute(self, **kwargs) -> str:
         self.validate_parameters(**kwargs)
         
-        query = kwargs.get("query")
-        rows = min(kwargs.get("rows", 10), 100)  # Max 100
+        query = kwargs.get("query", "")
+        author = kwargs.get("author", "")
+        title = kwargs.get("title", "")
+        filter_str = kwargs.get("filter", "")
+        rows = min(kwargs.get("rows", 10), 100)
         offset = kwargs.get("offset", 0)
         sort = kwargs.get("sort", "relevance")
         order = kwargs.get("order", "desc")
+        select = kwargs.get("select", "")
+        
+        if not query and not author and not title:
+            return "Error: At least one of 'query', 'author', or 'title' parameter must be provided."
         
         try:
-            results = self._search_papers(query, rows, offset, sort, order)
-            return self._format_results(results, query, rows, offset)
+            results = self._search_papers(query, author, title, filter_str, rows, offset, sort, order, select)
+            return self._format_results(results, query, author, title, filter_str, rows, offset)
         except Exception as e:
             return f"Error searching papers: {str(e)}"
 
-    def _search_papers(self, query: str, rows: int, offset: int, sort: str, order: str) -> Dict[str, Any]:
+    def _parse_filter(self, filter_str: str) -> Dict[str, str]:
+        """
+        Parse filter string into a dictionary.
+        
+        :param filter_str: Filter string in format 'key:value,key:value'
+        :return: Dictionary of filter key-value pairs
+        """
+        if not filter_str:
+            return {}
+        
+        filters = {}
+        pairs = filter_str.split(",")
+        for pair in pairs:
+            if ":" in pair:
+                key, value = pair.split(":", 1)
+                filters[key.strip()] = value.strip()
+        return filters
+
+    def _search_papers(
+        self,
+        query: str,
+        author: str,
+        title: str,
+        filter_str: str,
+        rows: int,
+        offset: int,
+        sort: str,
+        order: str,
+        select: str
+    ) -> Dict[str, Any]:
         """
         Search papers using Crossref API.
         
-        :param query: Search query string
+        :param query: General search query string
+        :param author: Author search query
+        :param title: Title search query
+        :param filter_str: Filter string
         :param rows: Number of results to return
         :param offset: Offset for pagination
         :param sort: Sort field
         :param order: Sort order
+        :param select: Fields to select
         :return: API response as dictionary
         """
         base_url = "https://api.crossref.org/works"
         
-        params = {
-            "query": query,
-            "rows": rows,
-            "offset": offset,
-            "sort": sort,
-            "order": order
-        }
+        params = {}
+        
+        if query:
+            params["query"] = query
+        if author:
+            params["query.author"] = author
+        if title:
+            params["query.title"] = title
+        
+        if filter_str:
+            parsed_filters = self._parse_filter(filter_str)
+            params["filter"] = ",".join([f"{k}:{v}" for k, v in parsed_filters.items()])
+        
+        params["rows"] = rows
+        params["offset"] = offset
+        params["sort"] = sort
+        params["order"] = order
+        
+        if select:
+            params["select"] = select
         
         query_string = parse.urlencode(params)
         url = f"{base_url}?{query_string}"
         
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            "User-Agent": f"ClarityBot/{__version__} (mailto:tudarcat@outlook.com)"
         }
         
         req = request.Request(url, headers=headers)
@@ -305,12 +387,24 @@ class PaperSearchTool(ToolBase):
             data = response.read().decode(charset, errors='ignore')
             return json.loads(data)
 
-    def _format_results(self, results: Dict[str, Any], query: str, rows: int, offset: int) -> str:
+    def _format_results(
+        self,
+        results: Dict[str, Any],
+        query: str,
+        author: str,
+        title: str,
+        filter_str: str,
+        rows: int,
+        offset: int
+    ) -> str:
         """
         Format search results into a readable string.
         
         :param results: API response dictionary
         :param query: Original search query
+        :param author: Author query
+        :param title: Title query
+        :param filter_str: Filter string
         :param rows: Number of rows requested
         :param offset: Offset used
         :return: Formatted results string
@@ -321,9 +415,20 @@ class PaperSearchTool(ToolBase):
         
         output = []
         output.append("=" * 60)
-        output.append(f"Paper Search Results")
+        output.append("Paper Search Results (Crossref API)")
         output.append("=" * 60)
-        output.append(f"Query: {query}")
+        
+        search_desc = []
+        if query:
+            search_desc.append(f"Query: {query}")
+        if author:
+            search_desc.append(f"Author: {author}")
+        if title:
+            search_desc.append(f"Title: {title}")
+        if filter_str:
+            search_desc.append(f"Filter: {filter_str}")
+        output.append(" | ".join(search_desc))
+        
         output.append(f"Total results: {total_results}")
         output.append(f"Showing: {offset + 1}-{min(offset + rows, total_results)} of {total_results}")
         output.append("=" * 60)
@@ -336,15 +441,13 @@ class PaperSearchTool(ToolBase):
             output.append(f"\n[{i}]")
             output.append("-" * 40)
             
-            # Title
             title = item.get("title", ["N/A"])[0] if item.get("title") else "N/A"
             output.append(f"Title: {title}")
             
-            # Authors
             authors = item.get("author", [])
             if authors:
                 author_names = []
-                for author in authors[:5]:  # Limit to first 5 authors
+                for author in authors[:5]:
                     given = author.get("given", "")
                     family = author.get("family", "")
                     if given and family:
@@ -361,35 +464,68 @@ class PaperSearchTool(ToolBase):
             else:
                 output.append("Authors: N/A")
             
-            # Year
             published_date = item.get("published-print", item.get("published-online", {}))
             date_parts = published_date.get("date-parts", [[]])[0] if published_date else []
             year = date_parts[0] if date_parts else None
             
             if not year:
-                # Try created date
                 created = item.get("created", {})
                 date_parts = created.get("date-parts", [[]])[0] if created else []
                 year = date_parts[0] if date_parts else "N/A"
             
             output.append(f"Year: {year}")
             
-            # DOI
             doi = item.get("DOI", "N/A")
             output.append(f"DOI: {doi}")
             
-            # URL
             url = item.get("URL", f"https://doi.org/{doi}" if doi != "N/A" else "N/A")
             output.append(f"URL: {url}")
             
-            # Container (Journal/Conference)
             container = item.get("container-title", [""])[0] if item.get("container-title") else ""
             if container:
                 output.append(f"Published in: {container}")
             
-            # Type
             pub_type = item.get("type", "")
             if pub_type:
                 output.append(f"Type: {pub_type}")
+            
+            publisher = item.get("publisher", "")
+            if publisher:
+                output.append(f"Publisher: {publisher}")
+            
+            volume = item.get("volume", "")
+            if volume:
+                output.append(f"Volume: {volume}")
+            
+            issue = item.get("issue", "")
+            if issue:
+                output.append(f"Issue: {issue}")
+            
+            page = item.get("page", "")
+            if page:
+                output.append(f"Pages: {page}")
+            
+            issn = item.get("ISSN", "")
+            if issn:
+                output.append(f"ISSN: {', '.join(issn) if isinstance(issn, list) else issn}")
+            
+            abstract = item.get("abstract", "")
+            if abstract:
+                abstract_clean = re.sub(r'<[^>]+>', '', abstract)
+                abstract_clean = html.unescape(abstract_clean)
+                if len(abstract_clean) > 300:
+                    abstract_clean = abstract_clean[:300] + "..."
+                output.append(f"Abstract: {abstract_clean}")
+            
+            subjects = item.get("subject", [])
+            if subjects:
+                subject_str = ", ".join(subjects[:5])
+                if len(subjects) > 5:
+                    subject_str += f" and {len(subjects) - 5} more"
+                output.append(f"Subjects: {subject_str}")
+            
+            references_count = item.get("references-count", None)
+            if references_count is not None:
+                output.append(f"References: {references_count}")
         
         return "\n".join(output)

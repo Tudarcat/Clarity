@@ -21,6 +21,7 @@ Main CLI application for Clarity Agent.
 
 import os
 import sys
+import asyncio
 import typer
 from typing import Optional
 from pathlib import Path
@@ -336,7 +337,6 @@ def run_agent(
 
     context = MessageBuilder(work_dir=os.getcwd())
     
-    # Use ReAct loop
     OutputFormatter.print_system("Processing task...")
     
     if system_message and len(messages) == 0:
@@ -358,6 +358,45 @@ def run_agent(
     )
     
     result = loop.run_loop(messages, progress_callback, thinking_callback)
+    
+    return result
+
+
+async def run_agent_async(
+    user_input: str, 
+    provider: CustomProvider, 
+    messages: list, 
+    tools: list, 
+    system_message: str = None, 
+    max_iter: int = 20
+) -> LoopResult:
+    """
+    Async version of run_agent. Run the agent with the given input using async ReAct loop.
+    """
+
+    context = MessageBuilder(work_dir=os.getcwd())
+    
+    OutputFormatter.print_system("Processing task...")
+    
+    if system_message and len(messages) == 0:
+        messages.append({
+            "role": "system",
+            "content": system_message
+        })
+
+    messages.append({
+        "role": "user",
+        "content": user_input
+    })
+    
+    loop = ReActLoop(
+        provider=provider,
+        context=context,
+        tools=tools,
+        max_iter=max_iter
+    )
+    
+    result = await loop.arun_loop(messages, progress_callback, thinking_callback)
     
     return result
 

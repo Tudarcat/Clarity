@@ -66,6 +66,7 @@ including keywords in both English and the language used by the user, to ensure 
 13. For weather, travel, news, and similar web tasks, first call knowledge_repo,
     then use the returned recommended URL/site with scrape_web before giving a final answer.
 14. Do not replace knowledge_repo results with your own guessed websites.
+15. After invoking the paper search tool, you must provide a comprehensive summary of the retrieved information. This summary must explicitly include the Paper Title, Authors, Publication Date, and most critically, the DOI (Digital Object Identifier).
         """
         return identity
 

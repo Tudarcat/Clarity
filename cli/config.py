@@ -31,9 +31,9 @@ class ProviderConfig:
     """
     Configuration for a provider.
     """
-    provider_type: str = "doubao"
-    model: str = "ep-20260310201337-5k45l"
-    api_url: str = "https://ark.cn-beijing.volces.com/api/v3"
+    provider_type: str = ""
+    model: str = ""
+    api_url: str = ""
     api_key: Optional[str] = None
 
 
