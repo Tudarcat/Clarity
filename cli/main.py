@@ -509,8 +509,7 @@ def chat(
                         "  • [green]read_file[/green] - Read file contents\n"
                         "  • [green]write_file[/green] - Write content to a file\n"
                         "  • [green]edit_file[/green] - Edit a file\n"
-                        "  • [green]list_directory[/green] - List directory contents\n"
-                        "  • [green]web_scraper[/green] - Scrape web content",
+                        "  • [green]list_directory[/green] - List directory contents\n", 
                         title="[bold blue]📖 Help[/bold blue]",
                         border_style="blue"
                     ))

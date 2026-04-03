@@ -65,10 +65,11 @@ class ReActLoop:
             
             response = self.provider.chat(messages, tool_schemas)
             
-            if response.has_tool_calls():
+            if response.has_tool_calls():#agent认为需要调用工具
                 progress_callback(response)
                 messages = self._handle_tool_calls(messages, response)
-            else:
+            else:#否则,如果不需要调用工具,LLM认为任务已经完成,直接返回response.content
+                #属于一种隐式的判断,并没有严格控制的条件
                 progress_callback(response)
                 final_answer = response.content
                 return LoopResult(final_answer=final_answer, messages=messages, token_usage=response.token_usage)

@@ -47,14 +47,14 @@ class ReadFileTool(ToolBase):
                 required=True
             ),
             ToolParameter(
-                name="offset",
+                name="offset",#offset参数用于指定从第几行开始读取
                 type="integer",
                 description="The line number to start reading from (1-indexed). Default is 1.",
                 required=False,
                 default=1
             ),
             ToolParameter(
-                name="limit",
+                name="limit",#limit参数用于指定最多读取多少行
                 type="integer",
                 description="The maximum number of lines to read. Default is 2000.",
                 required=False,
