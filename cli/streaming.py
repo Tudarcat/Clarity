@@ -53,16 +53,19 @@ class StreamingCallback:
             self._live = Live(
                 "Thinking...",
                 console=self.console,
-                refresh_per_second=10,
-                transient=False
+                refresh_per_second=5,
+                transient=True,
+                vertical_overflow="visible"
             )
             self._live.start()
 
     def stop(self):
         """Stop the Live display and cleanup."""
         if self._live:
+            self._live.update("")
             self._live.stop()
             self._live = None
+            self.console.print()
 
     def __call__(self, part: StreamingPart):
         """
