@@ -49,6 +49,7 @@ from agent.core.loop import ReActLoop, LoopResult
 from agent.core.message import MessageBuilder
 from agent.tool import ReadFileTool, WriteFileTool, EditFileTool, ListDirectoryTool, WebScraperTool, ToolManager
 from cli.config import ConfigManager, Config, ProviderConfig
+from cli.streaming import create_streaming_callback
 from agent.provider import provider_type
 
 app = typer.Typer(
@@ -274,42 +275,36 @@ def thinking_callback():
     OutputFormatter.print_thinking()
 
 
-def progress_callback(response: LLMResponse):
+def progress_callback(response: LLMResponse, stream_cb=None):
     """
     Callback function to handle agent responses during the loop.
     """
-    # Clear the thinking indicator first
     OutputFormatter.clear_thinking()
-    
+
     if response.reasoning_content:
         OutputFormatter.print_think(response.reasoning_content)
 
     if response.content:
         if "<think" in response.content and "</think" in response.content:
-            content = response.content
-            # Find all occurrences of <think>...</think> tags
             import re
             think_pattern = r'<think(.*?)</think>'
-            matches = re.findall(think_pattern, content, re.DOTALL)
-            
+            matches = re.findall(think_pattern, response.content, re.DOTALL)
+
             if matches:
-                # Process each think block
                 for match in matches:
                     think_inner = match.strip()
                     if think_inner.startswith(">"):
                         think_inner = think_inner[1:].strip()
                     OutputFormatter.print_think(think_inner)
-                
-                # Remove all think blocks from the content
-                clean_content = re.sub(think_pattern, '', content, flags=re.DOTALL).strip()
+
+                clean_content = re.sub(think_pattern, '', response.content, flags=re.DOTALL).strip()
                 if clean_content:
                     OutputFormatter.print_content(clean_content)
             else:
-                # No valid think tags, just print as content
                 OutputFormatter.print_content(response.content)
         else:
             OutputFormatter.print_content(response.content)
-    
+
     if response.has_tool_calls():
         for tool_call in response.tool_calls:
             tool_name = tool_call.get("function", {}).get("name", "unknown")
@@ -324,21 +319,23 @@ def progress_callback(response: LLMResponse):
 
 
 def run_agent(
-    user_input: str, 
-    provider: CustomProvider, 
-    messages: list, 
-    tools: list, 
-    system_message: str = None, 
-    max_iter: int = 20
+    user_input: str,
+    provider: CustomProvider,
+    messages: list,
+    tools: list,
+    system_message: str = None,
+    max_iter: int = 20,
+    streaming: bool = False
 ) -> LoopResult:
     """
     Run the agent with the given input using ReAct loop.
-    """
 
+    :param streaming: Whether to enable streaming mode for real-time output.
+    """
     context = MessageBuilder(work_dir=os.getcwd())
-    
+
     OutputFormatter.print_system("Processing task...")
-    
+
     if system_message and len(messages) == 0:
         messages.append({
             "role": "system",
@@ -349,35 +346,49 @@ def run_agent(
         "role": "user",
         "content": user_input
     })
-    
+
     loop = ReActLoop(
         provider=provider,
         context=context,
         tools=tools,
         max_iter=max_iter
     )
-    
-    result = loop.run_loop(messages, progress_callback, thinking_callback)
-    
+
+    stream_cb = create_streaming_callback(console, streaming)
+    stream_cb.start()
+
+    try:
+        result = loop.run_loop(
+            messages,
+            lambda r: progress_callback(r, stream_cb),
+            thinking_callback,
+            streaming=streaming,
+            stream_callback=stream_cb
+        )
+    finally:
+        stream_cb.stop()
+
     return result
 
 
 async def run_agent_async(
-    user_input: str, 
-    provider: CustomProvider, 
-    messages: list, 
-    tools: list, 
-    system_message: str = None, 
-    max_iter: int = 20
+    user_input: str,
+    provider: CustomProvider,
+    messages: list,
+    tools: list,
+    system_message: str = None,
+    max_iter: int = 20,
+    streaming: bool = False
 ) -> LoopResult:
     """
     Async version of run_agent. Run the agent with the given input using async ReAct loop.
-    """
 
+    :param streaming: Whether to enable streaming mode for real-time output.
+    """
     context = MessageBuilder(work_dir=os.getcwd())
-    
+
     OutputFormatter.print_system("Processing task...")
-    
+
     if system_message and len(messages) == 0:
         messages.append({
             "role": "system",
@@ -388,16 +399,28 @@ async def run_agent_async(
         "role": "user",
         "content": user_input
     })
-    
+
     loop = ReActLoop(
         provider=provider,
         context=context,
         tools=tools,
         max_iter=max_iter
     )
-    
-    result = await loop.arun_loop(messages, progress_callback, thinking_callback)
-    
+
+    stream_cb = create_streaming_callback(console, streaming)
+    stream_cb.start()
+
+    try:
+        result = await loop.arun_loop(
+            messages,
+            lambda r: progress_callback(r, stream_cb),
+            thinking_callback,
+            streaming=streaming,
+            stream_callback=stream_cb
+        )
+    finally:
+        stream_cb.stop()
+
     return result
 
 
@@ -456,7 +479,7 @@ def chat(
         final_model = model or provider_config.model
         final_work_dir = work_dir or loaded_config.work_dir
         final_max_iter = loaded_config.max_iter
-        # Use API key from config if not provided via command line
+        final_streaming = loaded_config.streaming
         if not api_key and provider_config.api_key:
             api_key = provider_config.api_key
     else:
@@ -464,6 +487,7 @@ def chat(
         final_model = model or ""
         final_work_dir = work_dir
         final_max_iter = 20
+        final_streaming = True
     
     if not api_key:
         OutputFormatter.print_error(
@@ -611,7 +635,7 @@ def chat(
                 OutputFormatter.print_system("Conversation compressed.")
 
             # Handle regular input
-            result = run_agent(user_input, provider, messages, tools, system_message, final_max_iter)
+            result = run_agent(user_input, provider, messages, tools, system_message, final_max_iter, streaming=final_streaming)
             
             # count token usage
             if result.token_usage:
