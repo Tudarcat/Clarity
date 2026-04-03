@@ -48,7 +48,7 @@ class ReActLoop:
                  progress_callback: Callable[[LLMResponse], None],
                  thinking_callback: Optional[Callable[[], None]] = None, 
                  streaming: bool = False,
-                 stream_callback: Optional[Callable[[StreamingPart], None]] = None
+                 stream_callback: Optional[Any] = None
                  ) -> LoopResult:
 
         """
@@ -63,15 +63,23 @@ class ReActLoop:
         tool_schemas = [tool.to_openai_tool() for tool in self.tools]
         
         for _ in range(self.max_iter):
-            # Call thinking callback before making the API call
+            if stream_callback and hasattr(stream_callback, "reset"):
+                stream_callback.reset()
+            
             if thinking_callback:
                 thinking_callback()
             
             response = self.provider.chat(messages, tool_schemas, streaming, stream_callback)
             
+            if stream_callback and hasattr(stream_callback, "stop"):
+                stream_callback.stop()
+            
             if response.has_tool_calls():
                 progress_callback(response)
                 messages = self._handle_tool_calls(messages, response)
+                
+                if stream_callback and hasattr(stream_callback, "start"):
+                    stream_callback.start()
             else:
                 progress_callback(response)
                 final_answer = response.content
@@ -83,7 +91,7 @@ class ReActLoop:
                         progress_callback: Callable[[LLMResponse], None],
                         thinking_callback: Optional[Callable[[], None]] = None, 
                         streaming: bool = False,
-                        stream_callback: Optional[Callable[[StreamingPart], None]] = None
+                        stream_callback: Optional[Any] = None
                         ) -> LoopResult:
         """
         Async version of run_loop. Run the ReAct loop with the given messages.
@@ -97,14 +105,23 @@ class ReActLoop:
         tool_schemas = [tool.to_openai_tool() for tool in self.tools]
         
         for _ in range(self.max_iter):
+            if stream_callback and hasattr(stream_callback, "reset"):
+                stream_callback.reset()
+            
             if thinking_callback:
                 thinking_callback()
             
             response = await self.provider.achat(messages, tool_schemas, streaming, stream_callback)
             
+            if stream_callback and hasattr(stream_callback, "stop"):
+                stream_callback.stop()
+            
             if response.has_tool_calls():
                 progress_callback(response)
                 messages = await self._ahandle_tool_calls(messages, response)
+                
+                if stream_callback and hasattr(stream_callback, "start"):
+                    stream_callback.start()
             else:
                 progress_callback(response)
                 final_answer = response.content

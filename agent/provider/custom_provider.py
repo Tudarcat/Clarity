@@ -21,7 +21,6 @@ from agent.provider.provider_base import ProviderBase, LLMResponse, StreamingPar
 from typing import Optional, Callable
 
 
-
 class CustomProvider(ProviderBase):
 
     def __init__(self, api_key: str, api_url: str, model: str = ""):
@@ -96,8 +95,6 @@ class CustomProvider(ProviderBase):
             full_reasoning_content = ""
             full_tool_calls = []
             total_tokens: int = 0
-
-            # used for temp tool calls storage
             temp_tool_calls_map = {}
 
             for chunk in response:
@@ -105,11 +102,9 @@ class CustomProvider(ProviderBase):
                     continue
                 delta = chunk.choices[0].delta
 
-                # basically 'usage' is available in the last chunk
                 if hasattr(chunk, "usage") and chunk.usage:
                     total_tokens += chunk.usage.total_tokens
                 
-                # process reasoning content delta
                 if hasattr(delta, "reasoning_content") and delta.reasoning_content:
                     r_content = delta.reasoning_content
                     full_reasoning_content += r_content
@@ -117,19 +112,16 @@ class CustomProvider(ProviderBase):
                     if stream_callback:
                         stream_callback(r_part)
                 
-                # process content delta
                 if hasattr(delta, "content") and delta.content:
                     c_content = delta.content
                     full_content += c_content
                     c_part = StreamingPart(content_delta=c_content)
                     if stream_callback:
                         stream_callback(c_part)
-                    full_tool_calls.append(c_part.tool_calls)
                 
                 if hasattr(delta, "tool_calls") and delta.tool_calls:
                     for tc in delta.tool_calls:
                         index = tc.index
-                        
                         if index not in temp_tool_calls_map:
                             temp_tool_calls_map[index] = {
                                 "id": tc.id or "",
@@ -139,28 +131,19 @@ class CustomProvider(ProviderBase):
                                     "arguments": ""
                                 }
                             }
-                        
                         if tc.function and tc.function.arguments:
                             temp_tool_calls_map[index]["function"]["arguments"] += tc.function.arguments
-                        
-                        # id and function name appears in the first delta usually
                         if tc.id:
                             temp_tool_calls_map[index]["id"] = tc.id
                         if tc.function and tc.function.name:
                             temp_tool_calls_map[index]["function"]["name"] = tc.function.name
-                        
-                        sorted_indices = sorted(temp_tool_calls_map.keys())
-                        for idx in sorted_indices:
-                            full_tool_calls.append(temp_tool_calls_map[idx])
+
+            # After processing all chunks
+            sorted_indices = sorted(temp_tool_calls_map.keys())
+            for idx in sorted_indices:
+                full_tool_calls.append(temp_tool_calls_map[idx])
             
             return LLMResponse(content=full_content, tool_calls=full_tool_calls, reasoning_content=full_reasoning_content, token_usage={"total_tokens": total_tokens})
-        
-        # all_content = content if streaming else full_content
-        # all_tool_calls = full_tool_calls if streaming else tool_calls
-        # all_reasoning_content = full_reasoning_content if streaming else reasoning_content
-        # all_token_usage = {"total_tokens": total_tokens} if streaming else token_usage
-        
-        # return LLMResponse(content=all_content, tool_calls=all_tool_calls, reasoning_content=all_reasoning_content, token_usage=all_token_usage)
 
     def get_max_tokens(self) -> int:
         """

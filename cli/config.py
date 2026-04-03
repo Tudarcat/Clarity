@@ -45,6 +45,7 @@ class Config:
     provider: ProviderConfig
     work_dir: str = "."
     max_iter: int = 20
+    streaming: bool = True
 
 
 class ConfigManager:
@@ -81,7 +82,8 @@ class ConfigManager:
             config = Config(
                 provider=provider_config,
                 work_dir=data.get("work_dir", "."),
-                max_iter=data.get("max_iter", 20)
+                max_iter=data.get("max_iter", 20),
+                streaming=data.get("streaming", True)
             )
             
             return config
@@ -100,7 +102,8 @@ class ConfigManager:
             data = {
                 "provider": asdict(config.provider),
                 "work_dir": config.work_dir,
-                "max_iter": config.max_iter
+                "max_iter": config.max_iter,
+                "streaming": config.streaming
             }
             
             with open(self.config_path, "w", encoding="utf-8") as f:
