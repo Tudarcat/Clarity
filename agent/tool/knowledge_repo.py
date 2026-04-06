@@ -99,13 +99,19 @@ class KnowledgeRepo(ToolBase):
         output.append(f"Domain Hint: {domain_hint or 'N/A'}")
         output.append("-" * 50)
 
-        site_names = []
-        for site in item["sites"]:
-            if isinstance(site, dict):
-                site_names.append(site.get("name", "Unknown"))
-            else:
-                site_names.append(str(site))
-        output.append(f"Recommended Sites: {', '.join(site_names)}")
+        if suggestions:
+            first_sites = suggestions[0].get("sites", [])
+            site_names = []
+            for site in first_sites:
+                if isinstance(site, dict):
+                    site_names.append(site.get("name", "Unknown"))
+                else:
+                    site_names.append(str(site))
+            output.append(f"Recommended Sites: {', '.join(site_names)}")
+            output.append("-" * 50)
+        else:
+            output.append("Recommended Sites: N/A")
+            output.append("-" * 50)
 
         for i, item in enumerate(suggestions[:top_k], 1):
             output.append(f"[{i}] Source Type: {item['source_type']}")
@@ -125,6 +131,11 @@ class KnowledgeRepo(ToolBase):
         添加了priority字段，用于确定搜索路由的优先级，
         由于只返回top_k条建议，所以优先级越高，建议的路由越优先,便于后续添加新的路由匹配规则
         手动设置字段优先级,后续可以改为自动根据匹配规则和任务类型动态调整
+        """
+
+        """
+        4.6
+        修正了在execute中在定义item之前就访问了item['sites']导致的bug,导致调用工具报错
         """
         rules = [
             # 1. Weather
