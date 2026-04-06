@@ -301,31 +301,34 @@ def progress_callback(response: LLMResponse, stream_cb=None):
     """
     Callback function to handle agent responses during the loop.
     """
-    OutputFormatter.clear_thinking()
+    is_streaming_mode = stream_cb and hasattr(stream_cb, 'streaming') and stream_cb.streaming
+    
+    if not is_streaming_mode:
+        OutputFormatter.clear_thinking()
 
-    if response.reasoning_content:
-        OutputFormatter.print_think(response.reasoning_content)
+        if response.reasoning_content:
+            OutputFormatter.print_think(response.reasoning_content)
 
-    if response.content:
-        if "<think" in response.content and "</think" in response.content:
-            import re
-            think_pattern = r'<think(.*?)</think>'
-            matches = re.findall(think_pattern, response.content, re.DOTALL)
+        if response.content:
+            if "<think" in response.content and "</think" in response.content:
+                import re
+                think_pattern = r'<think(.*?)</think>'
+                matches = re.findall(think_pattern, response.content, re.DOTALL)
 
-            if matches:
-                for match in matches:
-                    think_inner = match.strip()
-                    if think_inner.startswith(">"):
-                        think_inner = think_inner[1:].strip()
-                    OutputFormatter.print_think(think_inner)
+                if matches:
+                    for match in matches:
+                        think_inner = match.strip()
+                        if think_inner.startswith(">"):
+                            think_inner = think_inner[1:].strip()
+                        OutputFormatter.print_think(think_inner)
 
-                clean_content = re.sub(think_pattern, '', response.content, flags=re.DOTALL).strip()
-                if clean_content:
-                    OutputFormatter.print_content(clean_content)
+                    clean_content = re.sub(think_pattern, '', response.content, flags=re.DOTALL).strip()
+                    if clean_content:
+                        OutputFormatter.print_content(clean_content)
+                else:
+                    OutputFormatter.print_content(response.content)
             else:
                 OutputFormatter.print_content(response.content)
-        else:
-            OutputFormatter.print_content(response.content)
 
     if response.has_tool_calls():
         for tool_call in response.tool_calls:

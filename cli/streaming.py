@@ -14,8 +14,7 @@
    limitations under the License.
 '''
 
-from rich.console import Console, Group
-from rich.live import Live
+from rich.console import Console
 from rich.markdown import Markdown
 from rich.text import Text
 from typing import Optional, Callable, Protocol
@@ -37,7 +36,9 @@ class StreamingCallbackProtocol(Protocol):
 
 class StreamingCallback:
     """
-    Callback handler for streaming output with Rich Live display.
+    Callback handler for streaming output using direct console append (no Live).
+    Avoids cursor position issues when scrolling.
+    Markdown is rendered only in non-streaming mode for perfect formatting.
     """
 
     def __init__(self, console: Console, streaming: bool = True):
@@ -45,74 +46,47 @@ class StreamingCallback:
         self.streaming = streaming
         self.full_content = ""
         self.full_reasoning = ""
-        self._live: Optional[Live] = None
+        self._reasoning_printed = False
+        self._content_printed = False
 
     def start(self):
-        """Start the Live display."""
+        """Start the streaming display."""
         if self.streaming:
-            self._live = Live(
-                "Thinking...",
-                console=self.console,
-                refresh_per_second=5,
-                transient=True,
-                vertical_overflow="visible"
-            )
-            self._live.start()
+            self.console.print(Text("Thinking:", style="bold magenta"))
 
     def stop(self):
-        """Stop the Live display and cleanup."""
-        if self._live:
-            self._live.update("")
-            self._live.stop()
-            self._live = None
+        """
+        Stop the streaming display.
+        In streaming mode, ensures proper line ending.
+        Markdown is not rendered in streaming mode to avoid scroll issues.
+        """
+        if self.streaming and (self._reasoning_printed or self._content_printed):
             self.console.print()
 
     def __call__(self, part: StreamingPart):
         """
-        Handle a streaming part. Called for each chunk of the streaming response.
+        Handle a streaming part by directly printing deltas.
 
         :param part: The StreamingPart containing delta content.
         """
         if not self.streaming:
             return
 
-        updated = False
-
         if part.reasoning_delta:
             self.full_reasoning += part.reasoning_delta
-            updated = True
+            if not self._reasoning_printed:
+                #self.console.print(Text("Thinking:\n", style="bold magenta"), end="")
+                self._reasoning_printed = True
+            self.console.print(Text(part.reasoning_delta, style="dim magenta"), end="")
 
         if part.content_delta:
             self.full_content += part.content_delta
-            updated = True
-
-        if updated and self._live:
-            self._update_display()
-
-    def _update_display(self):
-        """Update the Live display with current content."""
-        if not self._live:
-            return
-
-        content_parts = []
-
-        if self.full_reasoning:
-            content_parts.append(Text("Thinking:\n", style="bold magenta"))
-            content_parts.append(Text(self.full_reasoning, style="dim magenta"))
-            if self.full_content:
-                content_parts.append(Text("\n\n", style=""))
-
-        if self.full_content:
-            content_parts.append(Text("Assistant:\n", style="bold green"))
-            try:
-                content_parts.append(Markdown(self.full_content))
-            except:
-                content_parts.append(Text(self.full_content, style=""))
-
-        if content_parts:
-            self._live.update(Group(*content_parts))
-        else:
-            self._live.update("Thinking...")
+            if not self._content_printed:
+                if self._reasoning_printed:
+                    self.console.print("\n")
+                self.console.print(Text("Assistant:\n", style="bold green"), end="")
+                self._content_printed = True
+            self.console.print(part.content_delta, end="")
 
     def get_full_content(self) -> str:
         """Get the accumulated full content."""
@@ -126,13 +100,14 @@ class StreamingCallback:
         """Reset all accumulated content."""
         self.full_content = ""
         self.full_reasoning = ""
-        if self._live:
-            self._live.update("Thinking...")
+        self._reasoning_printed = False
+        self._content_printed = False
 
 
 class NonStreamingCallback:
     """
     Non-streaming callback that simply collects content for later display.
+    Renders perfect Markdown when displayed via OutputFormatter.
     """
 
     def __init__(self, console: Console):
