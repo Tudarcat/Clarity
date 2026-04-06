@@ -149,7 +149,7 @@ class WriteFileTool(ToolBase):
 
 class EditFileTool(ToolBase):
     """
-    Tool for editing a file by replacing specific content.
+    Tool for editing a file by replacing content at specific line numbers.
     """
 
     @property
@@ -158,7 +158,7 @@ class EditFileTool(ToolBase):
 
     @property
     def description(self) -> str:
-        return "Edit a file by replacing a specific chunk of content with new content."
+        return "Edit a file by replacing content from start_line to end_line (1-indexed, inclusive) with new_content."
 
     @property
     def parameters(self) -> List[ToolParameter]:
@@ -170,15 +170,21 @@ class EditFileTool(ToolBase):
                 required=True
             ),
             ToolParameter(
-                name="old_content",
-                type="string",
-                description="The content to search for and replace. This must be an exact match.",
+                name="start_line",
+                type="integer",
+                description="The first line to replace (1-indexed, inclusive).",
+                required=True
+            ),
+            ToolParameter(
+                name="end_line",
+                type="integer",
+                description="The last line to replace (1-indexed, inclusive). Use -1 to replace from start_line to the end of file.",
                 required=True
             ),
             ToolParameter(
                 name="new_content",
                 type="string",
-                description="The new content to replace the old content with.",
+                description="The new content to replace the specified lines with. Use empty string to delete the lines.",
                 required=True
             )
         ]
@@ -187,7 +193,8 @@ class EditFileTool(ToolBase):
         self.validate_parameters(**kwargs)
         
         file_path = kwargs.get("file_path")
-        old_content = kwargs.get("old_content")
+        start_line = kwargs.get("start_line")
+        end_line = kwargs.get("end_line")
         new_content = kwargs.get("new_content")
         
         if not os.path.exists(file_path):
@@ -198,21 +205,53 @@ class EditFileTool(ToolBase):
         
         try:
             with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
+                lines = f.readlines()
             
-            if old_content not in content:
-                return f"Error: The specified old_content was not found in '{file_path}'."
+            total_lines = len(lines)
             
-            count = content.count(old_content)
-            if count > 1:
-                return f"Error: The old_content appears {count} times in the file. Please provide more context to make it unique."
+            if start_line < 1:
+                return f"Error: start_line must be >= 1. Got {start_line}."
             
-            new_file_content = content.replace(old_content, new_content, 1)
+            start_idx = start_line - 1
+            
+            if end_line == -1:
+                end_idx = total_lines
+            else:
+                if end_line < start_line:
+                    return f"Error: end_line ({end_line}) must be >= start_line ({start_line})."
+                if end_line > total_lines:
+                    return f"Error: end_line ({end_line}) is greater than total lines in file ({total_lines})."
+                end_idx = end_line
+            
+            if start_idx >= total_lines:
+                return f"Error: start_line ({start_line}) is beyond total lines in file ({total_lines})."
+            
+            new_lines = []
+            new_lines.extend(lines[:start_idx])
+            
+            if new_content:
+                if new_content.endswith('\n'):
+                    new_content_lines = new_content.splitlines(True)
+                else:
+                    new_content_lines = (new_content + '\n').splitlines(True)
+                new_lines.extend(new_content_lines)
+            
+            new_lines.extend(lines[end_idx:])
             
             with open(file_path, "w", encoding="utf-8") as f:
-                f.write(new_file_content)
+                f.writelines(new_lines)
             
-            return f"Successfully edited '{file_path}'. Replaced 1 occurrence."
+            replaced_count = end_idx - start_idx
+            added_count = len(new_content.splitlines()) if new_content else 0
+            new_total = len(new_lines)
+            
+            result = []
+            result.append(f"Successfully edited '{file_path}'.")
+            result.append(f"Replaced lines {start_line}-{end_line if end_line != -1 else total_lines} ({replaced_count} lines)")
+            result.append(f"Added {added_count} lines")
+            result.append(f"File now has {new_total} lines total")
+            
+            return "\n".join(result)
         except Exception as e:
             return f"Error editing file '{file_path}': {str(e)}"
 

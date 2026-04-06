@@ -219,11 +219,18 @@ class PaperSearchTool(ToolBase):
 
     @property
     def description(self) -> str:
-        return "Search for academic papers using Crossref API. Supports general query, author query, title query, and filters. Returns paper titles, authors, years, DOIs, and more."
+        return "Search for academic papers using Crossref or Semantic Scholar API. Semantic Scholar provides citations, references, and more metadata. Supports general query, author query, title query, and filters. Returns paper titles, authors, years, DOIs, citations, etc."
 
     @property
     def parameters(self) -> List[ToolParameter]:
         return [
+            ToolParameter(
+                name="api",
+                type="string",
+                description="API to use: 'crossref' (default) or 'semanticscholar'. Semantic Scholar offers citations, references, and richer metadata.",
+                required=False,
+                default="crossref"
+            ),
             ToolParameter(
                 name="query",
                 type="string",
@@ -287,6 +294,7 @@ class PaperSearchTool(ToolBase):
     def execute(self, **kwargs) -> str:
         self.validate_parameters(**kwargs)
         
+        api_choice = kwargs.get("api", "crossref").lower()
         query = kwargs.get("query", "")
         author = kwargs.get("author", "")
         title = kwargs.get("title", "")
@@ -301,8 +309,18 @@ class PaperSearchTool(ToolBase):
             return "Error: At least one of 'query', 'author', or 'title' parameter must be provided."
         
         try:
-            results = self._search_papers(query, author, title, filter_str, rows, offset, sort, order, select)
-            return self._format_results(results, query, author, title, filter_str, rows, offset)
+            if api_choice == "semanticscholar":
+                try:
+                    results = self._search_semantic_scholar(query, author, title, rows, offset)
+                    return self._format_semantic_scholar_results(results, query, author, title, rows, offset)
+                except Exception as ss_error:
+                    fallback_msg = f"Semantic Scholar API failed: {str(ss_error)}. Falling back to Crossref API..."
+                    crossref_results = self._search_papers(query, author, title, filter_str, rows, offset, sort, order, select)
+                    crossref_output = self._format_results(crossref_results, query, author, title, filter_str, rows, offset)
+                    return f"⚠️ {fallback_msg}\n\n{crossref_output}"
+            else:
+                results = self._search_papers(query, author, title, filter_str, rows, offset, sort, order, select)
+                return self._format_results(results, query, author, title, filter_str, rows, offset)
         except Exception as e:
             return f"Error searching papers: {str(e)}"
 
@@ -527,5 +545,212 @@ class PaperSearchTool(ToolBase):
             references_count = item.get("references-count", None)
             if references_count is not None:
                 output.append(f"References: {references_count}")
+        
+        return "\n".join(output)
+
+    def _search_semantic_scholar(
+        self,
+        query: str,
+        author: str,
+        title: str,
+        rows: int,
+        offset: int
+    ) -> Dict[str, Any]:
+        """
+        Search papers using Semantic Scholar API.
+        Includes retry logic for rate limiting (429 errors).
+        
+        :param query: General search query string
+        :param author: Author search query
+        :param title: Title search query
+        :param rows: Number of results to return
+        :param offset: Offset for pagination
+        :return: API response as dictionary
+        """
+        import time
+        
+        base_url = "https://api.semanticscholar.org/graph/v1/paper/search"
+        
+        params = {}
+        
+        search_query = []
+        if query:
+            search_query.append(query)
+        if author:
+            search_query.append(f"author:{author}")
+        if title:
+            search_query.append(f"title:{title}")
+        
+        if not search_query:
+            return {"error": "No search query provided"}
+        
+        params["query"] = " ".join(search_query)
+        params["limit"] = min(rows, 100)
+        params["offset"] = offset
+        
+        fields = [
+            "title",
+            "abstract",
+            "authors",
+            "year",
+            "journal",
+            "venue",
+            "publicationDate",
+            "externalIds",
+            "citationCount",
+            "influentialCitationCount",
+            "referenceCount",
+            "fieldsOfStudy",
+            "url"
+        ]
+        params["fields"] = ",".join(fields)
+        
+        query_string = parse.urlencode(params)
+        url = f"{base_url}?{query_string}"
+        
+        headers = {
+            "User-Agent": f"ClarityBot/{__version__} (mailto:tudarcat@outlook.com)",
+            "Accept": "application/json"
+        }
+        
+        max_retries = 3
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                req = request.Request(url, headers=headers)
+                
+                with request.urlopen(req, timeout=30) as response:
+                    charset = response.headers.get_content_charset() or 'utf-8'
+                    data = response.read().decode(charset, errors='ignore')
+                    return json.loads(data)
+                    
+            except HTTPError as e:
+                if e.code == 429:
+                    if attempt < max_retries - 1:
+                        retry_after = e.headers.get('Retry-After', retry_delay)
+                        try:
+                            wait_time = int(retry_after)
+                        except (ValueError, TypeError):
+                            wait_time = retry_delay * (attempt + 1)
+                        
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        raise Exception(f"Semantic Scholar API rate limit exceeded after {max_retries} attempts. Please try again later or use 'api=crossref' as fallback.")
+                elif e.code == 404:
+                    raise Exception("Semantic Scholar API endpoint not found.")
+                else:
+                    raise Exception(f"Semantic Scholar API returned error {e.code}: {e.reason}")
+            except URLError as e:
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                else:
+                    raise Exception(f"Connection error: {str(e)}. Please check your network connection.")
+
+    def _format_semantic_scholar_results(
+        self,
+        results: Dict[str, Any],
+        query: str,
+        author: str,
+        title: str,
+        rows: int,
+        offset: int
+    ) -> str:
+        """
+        Format Semantic Scholar search results into a readable string.
+        
+        :param results: API response dictionary
+        :param query: Original search query
+        :param author: Author query
+        :param title: Title query
+        :param rows: Number of rows requested
+        :param offset: Offset used
+        :return: Formatted results string
+        """
+        total_results = results.get("total", 0)
+        items = results.get("data", [])
+        
+        output = []
+        output.append("=" * 60)
+        output.append("Paper Search Results (Semantic Scholar API)")
+        output.append("=" * 60)
+        
+        search_desc = []
+        if query:
+            search_desc.append(f"Query: {query}")
+        if author:
+            search_desc.append(f"Author: {author}")
+        if title:
+            search_desc.append(f"Title: {title}")
+        output.append(" | ".join(search_desc))
+        
+        output.append(f"Total results: {total_results}")
+        output.append(f"Showing: {offset + 1}-{min(offset + rows, total_results)} of {total_results}")
+        output.append("=" * 60)
+        
+        if not items:
+            output.append("\nNo papers found for this query.")
+            return "\n".join(output)
+        
+        for i, item in enumerate(items, 1):
+            output.append(f"\n[{i}]")
+            output.append("-" * 40)
+            
+            paper_title = item.get("title", "N/A")
+            output.append(f"Title: {paper_title}")
+            
+            authors = item.get("authors", [])
+            if authors:
+                author_names = []
+                for auth in authors[:5]:
+                    name = auth.get("name", "")
+                    if name:
+                        author_names.append(name)
+                
+                author_str = ", ".join(author_names)
+                if len(authors) > 5:
+                    author_str += f" et al. ({len(authors)} authors total)"
+                output.append(f"Authors: {author_str}")
+            else:
+                output.append("Authors: N/A")
+            
+            year = item.get("year", "N/A")
+            output.append(f"Year: {year}")
+            
+            external_ids = item.get("externalIds", {})
+            doi = external_ids.get("DOI", "N/A")
+            if doi != "N/A":
+                output.append(f"DOI: {doi}")
+            
+            url = item.get("url", f"https://doi.org/{doi}" if doi != "N/A" else "N/A")
+            output.append(f"URL: {url}")
+            
+            venue = item.get("venue", "") or item.get("journal", "")
+            if venue:
+                output.append(f"Published in: {venue}")
+            
+            citation_count = item.get("citationCount")
+            if citation_count is not None:
+                output.append(f"Citations: {citation_count}")
+            
+            influential_citation_count = item.get("influentialCitationCount")
+            if influential_citation_count is not None:
+                output.append(f"Influential Citations: {influential_citation_count}")
+            
+            reference_count = item.get("referenceCount")
+            if reference_count is not None:
+                output.append(f"References: {reference_count}")
+            
+            fields_of_study = item.get("fieldsOfStudy", [])
+            if fields_of_study:
+                output.append(f"Fields: {', '.join(fields_of_study)}")
+            
+            abstract = item.get("abstract", "")
+            if abstract:
+                if len(abstract) > 300:
+                    abstract = abstract[:300] + "..."
+                output.append(f"Abstract: {abstract}")
         
         return "\n".join(output)
