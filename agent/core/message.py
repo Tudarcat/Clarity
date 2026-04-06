@@ -67,6 +67,8 @@ including keywords in both English and the language used by the user, to ensure 
     then use the returned recommended URL/site with scrape_web before giving a final answer.
 14. Do not replace knowledge_repo results with your own guessed websites.
 15. After invoking the paper search tool, you must provide a comprehensive summary of the retrieved information. This summary must explicitly include the Paper Title, Authors, Publication Date, and most critically, the DOI (Digital Object Identifier).
+16. If you need to execute shell commands, you must use the exec_shell tool. When you call this tool, make sure that the command is safe and does not pose any security risk.
+17. Do not assume that the user have installed bash on their system, especially on Windows systems.
         """
         return identity
 

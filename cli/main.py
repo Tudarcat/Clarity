@@ -572,7 +572,10 @@ def chat(
                         "  • [green]read_file[/green] - Read file contents\n"
                         "  • [green]write_file[/green] - Write content to a file\n"
                         "  • [green]edit_file[/green] - Edit a file\n"
-                        "  • [green]list_directory[/green] - List directory contents\n", 
+                        "  • [green]list_directory[/green] - List directory contents\n"
+                        "  • [green]read_pdf[/green] - Read text from PDF file\n"
+                        "  • [green]read_docx[/green] - Read text from DOCX file\n"
+                        "  • [green]exec_shell[/green] - Execute shell commands\n", 
                         title="[bold blue]📖 Help[/bold blue]",
                         border_style="blue"
                     ))

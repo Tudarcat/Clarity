@@ -29,6 +29,8 @@ from agent.tool.file_tools import WriteFileTool
 from agent.tool.file_tools import ListDirectoryTool
 from agent.tool.task_tools import UpdateTaskTool
 from agent.tool.pdf_tools import ReadPDFTool
+from agent.tool.docx_tools import ReadDocxTool
+from agent.tool.shell_tools import ShellExecTool
 from agent.tool.knowledge_repo import KnowledgeRepo
 
 class ToolManager:
@@ -45,6 +47,8 @@ class ToolManager:
         PaperSearchTool(),
         UpdateTaskTool(),
         ReadPDFTool(),
+        ReadDocxTool(),
+        ShellExecTool(),
         KnowledgeRepo()
     ]   
     tools_dict = {tool.name: tool for tool in tools_list}

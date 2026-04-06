@@ -97,13 +97,13 @@ class StreamingCallback:
         content_parts = []
 
         if self.full_reasoning:
-            content_parts.append(Text("Reasoning:\n", style="bold magenta"))
+            content_parts.append(Text("Thinking:\n", style="bold magenta"))
             content_parts.append(Text(self.full_reasoning, style="dim magenta"))
             if self.full_content:
                 content_parts.append(Text("\n\n", style=""))
 
         if self.full_content:
-            content_parts.append(Text("Content:\n", style="bold green"))
+            content_parts.append(Text("Assistant:\n", style="bold green"))
             try:
                 content_parts.append(Markdown(self.full_content))
             except:
