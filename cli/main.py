@@ -51,6 +51,8 @@ from agent.tool import ReadFileTool, WriteFileTool, EditFileTool, ListDirectoryT
 from cli.config import ConfigManager, Config, ProviderConfig
 from cli.streaming import create_streaming_callback
 from agent.provider import provider_type
+import platform
+import subprocess
 
 app = typer.Typer(
     name="clarity",
@@ -58,6 +60,26 @@ app = typer.Typer(
 )
 
 console = Console()
+
+
+def open_file_in_editor(file_path: Path):
+    """
+    Open a file in the default text editor.
+    
+    :param file_path: Path to the file to open.
+    """
+    try:
+        if platform.system() == 'Windows':
+            os.startfile(str(file_path))
+        elif platform.system() == 'Darwin':
+            subprocess.run(['open', str(file_path)], check=True)
+        else:
+            subprocess.run(['xdg-open', str(file_path)], check=True)
+        OutputFormatter.print_system(f"Opened config file in editor: {file_path}")
+    except Exception as e:
+        OutputFormatter.print_error(f"Failed to open file in editor: {str(e)}")
+        OutputFormatter.print_system(f"You can manually edit the file at: {file_path}")
+
 
 # Command completion for / commands
 COMMANDS = [
@@ -568,6 +590,11 @@ def chat(
                         "  • [yellow]/help[/yellow] - Show this help message\n"
                         "  • [yellow]/config[/yellow] - Show configuration\n"
                         "  • [yellow]/version[/yellow] - Show version\n\n"
+                        "[bold]Config Tool Tips:[/bold]\n"
+                        "  • [blue]config create[/blue] - Creates config and opens editor\n"
+                        "  • [blue]config create -n[/blue] - Creates config without opening editor\n"
+                        "  • [blue]config edit[/blue] - Opens config file in editor\n"
+                        "  • [blue]config edit --model xxx[/blue] - Edits via command line\n\n"
                         "[bold]Available Tools:[/bold]\n"
                         "  • [green]read_file[/green] - Read file contents\n"
                         "  • [green]write_file[/green] - Write content to a file\n"
@@ -662,6 +689,12 @@ def config(
         "-c",
         help="Path to configuration file"
     ),
+    no_open: bool = typer.Option(
+        False,
+        "--no-open",
+        "-n",
+        help="Don't open config file in editor after creating"
+    ),
     provider_type_arg: Optional[str] = typer.Option(
         None,
         "--provider-type",
@@ -741,6 +774,9 @@ def config(
                 title="[bold green]✅ Configuration Created[/bold green]",
                 border_style="green"
             ))
+            
+            if not no_open:
+                open_file_in_editor(config_manager.get_config_path())
         except Exception as e:
             OutputFormatter.print_error(f"Failed to create configuration: {str(e)}")
             raise typer.Exit(1)
@@ -785,6 +821,22 @@ def config(
                 OutputFormatter.print_system("Use 'config create' to create a new configuration.")
                 raise typer.Exit(1)
             
+            # If no parameters are provided, just open the editor
+            has_any_param = any([
+                provider_type_arg,
+                model,
+                api_url,
+                api_key is not None,
+                work_dir,
+                max_iter
+            ])
+            
+            if not has_any_param:
+                OutputFormatter.print_system(f"Opening config file in editor: {config_manager.get_config_path()}")
+                open_file_in_editor(config_manager.get_config_path())
+                return
+            
+            # Otherwise, update via command line
             if provider_type_arg:
                 if provider_type_arg not in provider_type:
                     OutputFormatter.print_error(f"Invalid provider type: {provider_type_arg}")
